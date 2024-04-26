@@ -3,10 +3,10 @@
 import models
 from models.base_model import BaseModel, Base
 from os import getenv
+from hashlib import md5
 import sqlalchemy
 from sqlalchemy import Column, String
 from sqlalchemy.orm import relationship
-import hashlib
 
 
 class User(BaseModel, Base):
@@ -25,12 +25,14 @@ class User(BaseModel, Base):
         first_name = ""
         last_name = ""
 
+    def __setattr__(self, name, value):
+        """Securely hashing passwords using MD5"""
+        if name == "password":
+            super(User, self).__setattr__(name,
+                                          md5(value.encode()).hexdigest())
+        else:
+            super(User, self).__setattr__(name, value)
+
     def __init__(self, *args, **kwargs):
         """initializes user"""
         super().__init__(*args, **kwargs)
-
-    def __setattr__(self, k, v):
-        """sets user pasword"""
-        if k == "password":
-            v = hashlib.md5(v.encode()).hexdigest()
-        super().__setattr__(k, v)
