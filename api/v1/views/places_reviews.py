@@ -1,139 +1,90 @@
 #!/usr/bin/python3
-"""Handles all RESTful API actions for `place_reviews` relationship"""
-from api.v1.views import app_views
+""" return dict repersantation of object """
 from models import storage
-from models.review import Review
-from models.place import Place
-from models.user import User
-from flask import jsonify, request, abort
+from models.engine.db_storage import classes
+from api.v1.views import app_views
+from flask import jsonify, abort, request, make_response
 
 
-@app_views.route("/places/<place_id>/reviews")
-def reviews_of_a_place(place_id):
-    """Get all reviews of a place.
-
-    Args:
-        place_id (str): ID of the place to get the reviews from.
-
-    Returns:
-        list: Reviews of that place.
-
-    Raises:
-        404: If the specified place_id does not exist.
-    """
-    place = storage.get(Place, place_id)
+@app_views.route("/places/<place_id>/reviews",
+                 methods=["GET"], strict_slashes=False)
+def review_get(place_id):
+    result = []
+    """ get all the reviews in a place """
+    place = storage.get(classes["Place"], place_id)
     if not place:
         abort(404)
-    result = []
-
-    for review in place.reviews:
-        result.append(review.to_dict())
-
+    for i in place.reviews:
+        result.append(i.to_dict())
     return jsonify(result)
 
 
-@app_views.route("/reviews/<review_id>")
-def review(review_id):
-    """Get a review.
-
-    Args:
-        review_id (str): ID of the review.
-
-    Returns:
-        dict: Review in JSON.
-    """
-    review = storage.get(Review, review_id)
+@app_views.route("/reviews/<review_id>", methods=["GET"], strict_slashes=False)
+def review_specific(review_id):
+    """ get the specific object from review """
+    review = storage.get(classes["Review"], review_id)
     if not review:
         abort(404)
-
     return jsonify(review.to_dict())
 
 
-@app_views.route("/reviews/<review_id>", methods=["DELETE"])
-def delete_review(review_id):
-    """Remove a review.
-
-    Args:
-        review_id (str): ID of the review.
-
-    Returns:
-        dict: An empty JSON.
-    """
-    review = storage.get(Review, review_id)
+@app_views.route("/reviews/<review_id>",
+                 methods=['DELETE'],
+                 strict_slashes=False)
+def review_specific_delete(review_id):
+    """ delete the inputed object from review """
+    review = storage.get(classes["Review"], review_id)
     if not review:
         abort(404)
-
-    review.delete()
+    storage.delete(review)
     storage.save()
+    return jsonify({}), 200
 
-    return jsonify({})
 
-
-@app_views.route("/places/<place_id>/reviews", methods=["POST"])
-def create_review(place_id):
-    """Create a review.
-
-    Args:
-        place_id (str): ID of the place to review.
-
-    Returns:
-        dict: The created review.
-
-    Raises:
-        404: If the specified place_id or user_id does not exist
-        400: If the request body is not a valid JSON or if it is missing
-             user_id or text.
-    """
-    place = storage.get(Place, place_id)
-    payload = request.get_json()
-    if not place:
+@app_views.route("/places/<place_id>/reviews",
+                 methods=['POST'], strict_slashes=False)
+def review_specific_post(place_id):
+    """ post the inputed object from review objects"""
+    task = [task for task in storage.all(
+        "Place").values() if task.id == place_id]
+    if len(task) == 0:
         abort(404)
-    if not payload:
-        abort(400, "Not a JSON")
-    if "user_id" not in payload:
-        abort(400, "Missing user_id")
-    if not storage.get(User, payload["user_id"]):
+    if not request.json:
+        return make_response("Not a JSON", 400)
+    if 'text' not in request.json:
+        return make_response("Missing text", 400)
+    if 'user_id' not in request.json:
+        return make_response("Missing user_id", 400)
+    task = [task for task in storage.all(
+        "User").values() if task.id == request.json["user_id"]]
+    if len(task) == 0:
         abort(404)
-    if "text" not in payload:
-        abort(400, "Missing text")
-
-    review = Review(place_id=place_id, **payload)
-    review.save()
-
-    return jsonify(review.to_dict()), 201
-
-
-@app_views.route("/reviews/<review_id>", methods=["PUT"])
-def update_review(review_id):
-    """Update a review.
-
-    Args:
-        review_id (str): ID of the review to update.
-
-    Returns:
-        dict: The updated review.
-
-    Raises:
-        404: If the specified review_id does not exist
-        400: If the request body is not a valid JSON.
-    """
-    review = storage.get(Review, review_id)
-    payload = request.get_json()
-    if not review:
+    obj = classes["Review"]
+    try:
+        new_item = obj()
+        for key, value in request.json.items():
+            setattr(new_item, key, value)
+        setattr(new_item, "place_id", place_id)
+        new_item.save()
+        return new_item.to_dict(), 201
+    except BaseException:
         abort(404)
-    if not payload:
-        abort(400, "Not a JSON")
 
-    for key, value in review.to_dict().items():
-        if key not in [
-            "id",
-            "user_id",
-            "place_id",
-            "created_at",
-            "updated_at",
-            "__class__",
-        ]:
-            setattr(review, key, payload[key] if key in payload else value)
-    review.save()
 
-    return jsonify(review.to_dict())
+@app_views.route("/reviews/<review_id>", methods=["PUT"], strict_slashes=False)
+def review_specific_put(review_id):
+    """ update the specific object from review objects """
+    instance = None
+    if not request.json:
+        return make_response("Not a JSON", 400)
+    check = ["id", "created_at", "updated_at", "user_id", "place_id"]
+    for i in storage.all("Review").values():
+        if i.id == review_id:
+            instance = i
+            for key, value in request.json.items():
+                if key not in check:
+                    setattr(i, key, value)
+                    i.save()
+    if not instance:
+        abort(404)
+    return instance.to_dict(), 200

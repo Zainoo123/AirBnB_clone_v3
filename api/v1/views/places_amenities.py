@@ -1,102 +1,61 @@
 #!/usr/bin/python3
-"""Handles all RESTful API actions for `place_amenity` relationship"""
-from flask import jsonify, abort
-
+""" return dict repersantation of object """
+from models import storage, storage_t
+from models.engine.db_storage import classes
 from api.v1.views import app_views
-from models.place import Place
-from models import storage
-from models import storage_t as storage_type
-from models.amenity import Amenity
+from flask import jsonify, abort, request, make_response
 
 
-@app_views.route("/places/<place_id>/amenities")
-def amenities_of_a_place(place_id):
-    """Retrieve all amenities of a place.
-
-    Args:
-        place_id (str): ID of the place to retrieve its amenities.
-
-    Returns:
-        list: All amenities of the place in JSON.
-
-    Raises:
-        404: If the specified place_id does not exist.
-    """
-    place = storage.get(Place, place_id)
-    if not place:
-        abort(404)
+@app_views.route("/places/<place_id>/amenities",
+                 methods=["GET"], strict_slashes=False)
+def PA_get(place_id):
     result = []
-
-    if storage_type == "db":
-        for amenity in place.amenities:
-            result.append(amenity.to_dict())
-    else:
-        result = place.amenities
-
+    """ get all the reviews in a place """
+    task = storage.get(classes['Place'], place_id)
+    if not task:
+        abort(404)
+    for i in task.amenities:
+        result.append(i.to_dict())
     return jsonify(result)
 
 
 @app_views.route("/places/<place_id>/amenities/<amenity_id>",
-                 methods=["DELETE"])
-def unlink_amenity_from_a_place(place_id, amenity_id):
-    """Unlink amenity from a place.
-
-    Args:
-        place_id (str): ID of the place.
-        amenity_id (str): ID of the amenity.
-
-    Returns:
-        dict: An empty JSON.
-
-    Raises:
-        404: If the specified place_id or amenity_id does not exist or if the
-             amenity is not linked to the place before the request.
-    """
-    place = storage.get(Place, place_id)
-    amenity = storage.get(Amenity, amenity_id)
-    if not place:
+                 methods=['DELETE'], strict_slashes=False)
+def PA_specific_delete(place_id, amenity_id):
+    """ delete the inputed object from review """
+    place = storage.get(classes['Place'], place_id)
+    task = storage.get(classes['Amenity'], amenity_id)
+    if not place or not task:
         abort(404)
-    if not amenity:
-        abort(404)
-    if amenity not in place.amenities:
-        abort(404)
-
-    if storage_type == "db":
-        place.amenities.remove(amenity)
+    if storage_t == 'db':
+        check = place.amenities
+        tasks = task
     else:
-        place.amenity_ids.remove(amenity)
-    storage.save()
+        check = place.amenity_id
+        tasks = task.id
+    for i in range(len(check)):
+        if check[i] == tasks:
+            check.pop(i)
+            storage.save()
+            return jsonify({}), 200
+    abort(404)
 
-    return jsonify({})
 
-
-@app_views.route("/places/<place_id>/amenities/<amenity_id>", methods=["POST"])
-def link_amenity_to_a_place(place_id, amenity_id):
-    """Link amenity to a place.
-
-    Args:
-        place_id (str): ID of the place.
-        amenity_id (str): ID of the amenity.
-
-    Returns:
-        dict: The amenity linked.
-
-    Raises:
-        404: If the specified place_id or amenity_id does not exist.
-    """
-    place = storage.get(Place, place_id)
-    amenity = storage.get(Amenity, amenity_id)
-    if not place:
+@app_views.route("/places/<place_id>/amenities/<amenity_id>",
+                 methods=['POST'], strict_slashes=False)
+def PA_specific_post(place_id, amenity_id):
+    """ post the inputed object from review objects"""
+    place = storage.get(classes['Place'], place_id)
+    amenity = storage.get(classes['Amenity'], amenity_id)
+    if not place or not amenity:
         abort(404)
-    if not amenity:
-        abort(404)
-    if amenity in place.amenities:
-        return jsonify(amenity.to_dict())
-
-    if storage_type == "db":
-        place.amenities.append(amenity)
+    if storage_t == 'db':
+        check = place.amenities
     else:
-        place.amenity_ids.append(amenity.id)
-    storage.save()
-
-    return jsonify(amenity.to_dict()), 201
+        check = place.amenity_id
+    for task in check:
+        if task == amenity:
+            return task.to_dict(), 200
+    place.amenities.append(amenity)
+    amenity.save()
+    return amenity.to_dict(), 201
